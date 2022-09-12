@@ -70,4 +70,4 @@
 (defn -main
   "Run the sketch"
   []
-  (->> scene (adapt/all-as-svg) (svg/serialize) (spit "demo.svg")))
+  (->> scene (adapt/all-as-svg) (svg/serialize) (spit "flowfield.svg")))
