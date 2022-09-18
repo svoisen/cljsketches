@@ -3,16 +3,17 @@
     [thi.ng.geom.svg.adapter :as adapt]
     [thi.ng.geom.svg.core :as svg]
     [thi.ng.geom.core :as g]
+    [thi.ng.geom.vector :as v]
     [thi.ng.geom.utils.intersect :as isec]
     [thi.ng.geom.circle :as c]
-    [thi.ng.geom.rect :as r]
-    [thi.ng.math.core :as m]))
+    [thi.ng.geom.rect :as r]))
 
 (def width 600)
 (def height 600)
-(def max-radius 200)
-(def min-radius 10)
+(def max-radius 90)
+(def min-radius 3)
 (def tile-size 100)
+(def padding 5)
 (def initial-tiles 
   (let [num-cols (/ width tile-size)
         num-rows (/ height tile-size)]
@@ -58,19 +59,22 @@
           (<= (+ y r) height))
       true false)))
 
+(defn circle-distance [c0 c1]
+  (- (g/dist (v/vec2 (:p c0)) (v/vec2 (:p c1))) (+ (:r c0) (:r c1))))
+
 (defn is-valid-circle?
   "Returns true if the given circle is in bounds and does not intersect with any 
   other circle."
   [circle all-tiles]
-  (if (not (inside-bounds? circle)) false 
+  (if (or (not (inside-bounds? circle)) (>= (:r circle) max-radius)) false 
     (let [intersecting-tiles (get-intersecting-tiles circle all-tiles)
           candidate-circles (flatten (map #(:circles %) intersecting-tiles))]
-      (true? (not-any? #(isec/intersect-circle-circle? % circle) candidate-circles)))))
+      (true? (not-any? #(<= (circle-distance % circle) padding) candidate-circles)))))
 
 (defn rand-point 
   "Get a random point in sketch boundaries."
   []
-  [(rand width) (rand height)])
+  [(+ min-radius (rand (- width min-radius))) (+ min-radius (rand (- height min-radius)))])
 
 (defn add-circle 
   "Add a circle to the sketch, starting with an initial radius and attempting to 
@@ -79,12 +83,13 @@
   (let [all-tiles (get data :tiles)
         all-circles (get data :circles)] 
     (loop [circle start-circle
-           prev-circle start-circle]
+           prev-circle nil]
       (if (not (is-valid-circle? circle all-tiles))
         ; If it's not a valid circle (out of bounds or hits another circle) stop
         ; and add the last valid circle to our data.
-        {:tiles (add-circle-to-intersecting-tiles prev-circle all-tiles) 
-         :circles (conj all-circles circle)}
+        (if (nil? prev-circle) data 
+          {:tiles (add-circle-to-intersecting-tiles prev-circle all-tiles) 
+           :circles (conj all-circles circle)})
         ; If it is a valid circle, increment the radius by 1 and determine if we
         ; can fit a larger circle in the same space.
         (recur (c/circle (:p circle) (+ 1 (:r circle))) circle)))))
@@ -95,7 +100,10 @@
     (reduce add-circle initial-data seeds)))
 
 (def sketch
-  (svg/svg {:width width :height height}))
+  (svg/svg {:width width :height height}
+           (svg/group 
+             {:fill "white"}
+             (map (fn [c] (svg/circle (:p c) (:r c) {:stroke "black"})) (:circles (generate-circles 5000))))))
 
 (defn -main
   "Run the sketch"
