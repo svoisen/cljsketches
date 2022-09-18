@@ -11,9 +11,11 @@
 (def width 600)
 (def height 600)
 (def max-radius 90)
-(def min-radius 3)
+(def min-radius 2)
 (def tile-size 100)
-(def padding 5)
+(def padding 2)
+(def num-attempts 5000)
+(def min-container-radius 20)
 (def initial-tiles 
   (let [num-cols (/ width tile-size)
         num-rows (/ height tile-size)]
@@ -46,7 +48,7 @@
     (reduce add all-tiles indices)))
 
 (defn inside-bounds? 
-  "Return true if the given circle is in the sketch boundaries."
+  "Return true if the given circle is inside the sketch boundaries."
   [circle]
   (let [p (:p circle)
         r (:r circle)
@@ -59,8 +61,15 @@
           (<= (+ y r) height))
       true false)))
 
-(defn circle-distance [c0 c1]
+(defn circle-distance 
+  "Returns the distance between two circles c0 and c1."
+  [c0 c1]
   (- (g/dist (v/vec2 (:p c0)) (v/vec2 (:p c1))) (+ (:r c0) (:r c1))))
+
+(defn contains-circle
+  "True if c0 is contained within c1."
+  [c0 c1]
+  (<= (+ (:r c0) (g/dist (v/vec2 (:p c0)) (v/vec2 (:p c1)))) (:r c1)))
 
 (defn is-valid-circle?
   "Returns true if the given circle is in bounds and does not intersect with any 
@@ -69,7 +78,13 @@
   (if (or (not (inside-bounds? circle)) (>= (:r circle) max-radius)) false 
     (let [intersecting-tiles (get-intersecting-tiles circle all-tiles)
           candidate-circles (flatten (map #(:circles %) intersecting-tiles))]
-      (true? (not-any? #(<= (circle-distance % circle) padding) candidate-circles)))))
+      ; TODO This could use some readability improvements.
+      ; A circle is invalid if it is not wholly contained inside a larger circle with
+      ; a radius bigger than min-container-radius or if its distance to another
+      ; circle is less than the padding value.
+      (true? (not-any? #(and 
+                          (not (and (>= (:r %) min-container-radius) (contains-circle circle %))) 
+                          (<= (circle-distance % circle) padding)) candidate-circles)))))
 
 (defn rand-point 
   "Get a random point in sketch boundaries."
@@ -103,7 +118,7 @@
   (svg/svg {:width width :height height}
            (svg/group 
              {:fill "white"}
-             (map (fn [c] (svg/circle (:p c) (:r c) {:stroke "black"})) (:circles (generate-circles 5000))))))
+             (map (fn [c] (svg/circle (:p c) (:r c) {:stroke "black"})) (:circles (generate-circles num-attempts))))))
 
 (defn -main
   "Run the sketch"
